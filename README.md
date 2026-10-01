@@ -39,6 +39,8 @@
 
 ## What This Does
 
+This is a tool that helps people online query through and search through outfit websites. It should be able to access Depop and other websites so you can put in a query for t-shirts under $30, for example. It would then help you surface listings that match your query. You can also query for other things, like certain styles, or types of pants, or even brands. Users are also able to have a wardrobe where they keep some of their clothes as well. They can make notes on the clothes about how it pairs in different styles or other pieces that go well with it. It is basically a comprehensive tool to track and buy clothing online. 
+
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
 
@@ -59,10 +61,10 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** This function searches listing data for items matching a description given in the input, and optionally specific sizes and price ceilings. 
+- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" --> A string description of the item you want to look for. Optionally, enter a size (string) or a max price (float)
+- **Returns:** A list of matching listing dicts with the best match first. If there is no match, it returns an empty dict. 
+- **When it has nothing:** It should return an empty dict with an empty list. 
 
 ### `suggest_outfit`
 
