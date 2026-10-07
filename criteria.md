@@ -21,82 +21,67 @@ data earns credit; *"80% seemed reasonable"* does not.
 
 ## 1. A matching query completes all three tools
 
-Given a query that matches at least one listing, the agent completes all three
-tool calls and returns a fit card — in at least 4 of 5 tries.
+Given a query that matches at least one listing, the agent completes all
+three tool calls and returns a fit card — in at least 4 of 5 tries. The five
+tries use five different queries, each matching at least one listing: `vintage graphic tee under $30`, `jeans under $40`, `denim jacket`,
+`top size M`, `cargo pants`.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+I picked 4 of 5 because my search is a plain keyword match and some phrasings will miss, like "tee shirt" when the data says "tee". Two of the three steps also call a model, which can get rate limited or come back empty, so I wanted room for one bad try without letting the main path be unreliable.
 
 ---
 
 ## 2. An impossible query stops before the second tool
 
 Given a query that matches no listings, the agent stops before calling
-`suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
+`suggest_outfit` and returns a message naming what to change — 5 of 5 tries. The five queries are fixed:
+`designer ballgown size XXS under $5`, `tuxedo`, `wedding dress under $10`,
+`tee under $1`, `saxophone`.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+I picked 5 of 5 because this path never calls a model. It is just parsing the query, filtering, and an `if not results` check, so it gives the same answer every time. If it misses, that is a bug in my branch and not bad luck.
 
 ---
 
-## 3. Something about state
+## 3. The item search found is the item the next tools received
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
+In 5 of 5 happy-path runs (five different queries), the `id` in
+`session["selected_item"]` equals `session["search_results"][0]["id"]`, equals
+the `id` of the dict passed into `suggest_outfit`, and equals the `id` of the
+dict passed into `create_fit_card`. I check it by wrapping both tools to record
+the `id` they were called with, then comparing the three ids after the run.
+Any mismatch in any of the five runs is a failure.
 
 **Why this target:**
-
-
+I picked 5 of 5 because nothing here is random. `run_agent` puts the item in the session and reads it back out, and no model decides which item gets passed. If the ids ever differ, something overwrote the session, and I want to see that every time. Comparing the whole dict instead of the id wouldn't add anything since each listing has a unique id.
 
 ---
 
-## 4. Something about the fit card
+## 4. The fit card is a postable caption that names the item's price and platform
 
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
+Across 5 different items, each fit card is two to four sentences (a sentence
+ends at `.`, `!` or `?` followed by a space, so a price like `$19.99` is not
+a break), contains the
+item's price (for example `$19`) and its platform name (for example `depop`,
+case-insensitive), and no two of the five cards start with the same first six
+words. At least 4 of the 5 cards must pass all three checks.
 
 **Why this target:**
-
-
+The model gives different words each run, so I can't check exact text, but I can check the things I'd be unhappy to miss: the price, the platform, a reasonable length, and openings that don't repeat. I picked 4 of 5 because the model will sometimes write a fifth sentence or skip the platform name. I didn't go lower because a caption without its own price isn't one I'd post.
 
 ---
 
-## 5. Your choice
+## 5. Search respects the price ceiling and the size
 
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
+For 5 queries that include a price ceiling and/or a size (for example
+`jeans under $40`, `top size M`, `shoes size US 8`), 100% of the returned
+listings are priced at or under the ceiling and match the size as a whole
+token (an `S` request never returns `US 9` or `XL`; a `M` request may return
+`S/M`). Zero violations across all five queries, checked by reading each
+returned listing's `price` and `size` fields.
 
 **Why this target:**
-
-
+I picked zero violations because these filters are plain comparisons with no judgment in them. I chose this one because the size filter is the easiest thing to get quietly wrong. A plain substring test says `"s" in "us 9"` is True, so someone asking for a small top would just see shoes and think the search was broken.
 
 ---
 
