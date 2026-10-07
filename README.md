@@ -83,57 +83,84 @@ This is a tool that helps you search through thrift listings. You type in what y
 
 ## Sample Run
 
-<!-- Two things go here.
-
-     1. One FULL query and its output, pasted as text.
-     2. Your three per-tool terminal tests — the command and what it printed. -->
-
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
 
+  Found:    Vintage Band Tee — Faded Grey — $19.0 on depop
+
+  Outfit:   **Outfit 1 (Grunge Streetwear):**
+Pair the vintage band tee with the baggy straight-leg jeans, black denim jacket, and black combat boots. Accessorize with the brown leather belt and black crossbody bag.
+
+**Outfit 2 (Layered Casual):**
+Layer the white ribbed tank top under the vintage band tee, worn tucked into the wide-leg khaki trousers. Pair with chunky white sneakers and the black crossbody bag.
+
+  Fit card: That perfect, perfectly worn-in grey fade you can only get from decades of actual concerts. Throwing this vintage band tee up on Depop for $19. It looks insanely good layered over a ribbed tank with wide-leg khakis, or just beat up with your favorite combat boots.
+```
+
+And a query that matches nothing, which stops at the branch:
+
+```
+$ python app.py ask 'designer ballgown size XXS under $5'
+
+  Nothing in the listings matched description 'designer ballgown', size XXS, under $5.
+Things to change: try broader words — 'jacket' finds more than 'cropped corduroy jacket'; drop the size, or try a neighbouring one; raise the price ceiling above $5.
 ```
 
 **The three tools, tested one at a time**
 
 ```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+$ python -c "from tools import search_listings; print([(r['title'],r['price'],r['size']) for r in search_listings('graphic tee', max_price=30)])"
+[('Graphic Tee — 2003 Tour Bootleg Style', 24.0, 'L'), ('Y2K Baby Tee — Butterfly Print', 18.0, 'S/M'), ('Vintage Band Tee — Faded Grey', 19.0, 'L'), ('Mesh Long-Sleeve Top — Black', 15.0, 'S/M'), ('Vintage Graphic Hoodie — Faded Black', 26.0, 'L'), ('Oversized Crewneck Sweatshirt — Vintage Navy', 20.0, 'XL (fits oversized)'), ('Low-Rise Cargo Pants — Khaki', 27.0, 'W29')]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+**Outfit 1**
+- Vintage Levi's 501 Jeans — Medium Wash
+- White ribbed tank top
+- Vintage black denim jacket
+- Chunky white sneakers
+- Black crossbody bag
 
+**Outfit 2**
+- Vintage Levi's 501 Jeans — Medium Wash
+- Oversized grey crewneck sweatshirt
+- Black combat boots
+- Brown leather belt
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Nothing beats broken-in vintage Levi's 501s in that perfect medium wash. Just add your favorite crisp white sneakers and a simple tee for the ultimate effortless 90s off-duty look. Grab them on my depop now for $38 before they're gone.
 ```
 
 ---
 
 ## How I Used AI
 
-<!-- Two specific moments. What you asked, what came back, what you changed.
-
-     "I used Claude to help me code" is not enough.
-
-     "I gave Claude my search_listings spec. It returned None on no match
-     instead of an empty list, so I changed it" is the level we want. -->
+I used a web AI tool for this project. I worked on my own, so I used it for the peer advice parts and for debugging.
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- What I asked for: I pasted my five acceptance criteria in and asked how it would test each one using only what the sentence says, with no suggestions for improving them.
+- What came back:
+  a. Matching query completes all three tools: Testable. Run 5 queries that match a listing and count how many return a fit card. Pass at 4 or more. It can't say which 5 queries to use, so it would have to invent them.
+  b. Impossible query stops before the second tool: Testable. Run 5 nonsense queries and check that suggest_outfit is never called and the returned message names something to change. "Naming what to change" is slightly fuzzy, because it doesn't say how many things or which ones.
+  c. Same item all the way through: Testable. It gives the exact method: wrap both tools to record ids, then compare the three ids. It still needs five different queries from somewhere.
+  d. Fit card is a postable caption: Mostly testable. Count sentences (2–4), look for the price and platform, and compare the first six words across cards. "Sentence" isn't defined, so a price like $19.99 could be miscounted as a sentence break. "Postable" is covered only by those three checks.
+  e. Search respects price and size: Testable. Read price and size on each returned listing. The one ambiguity is One Size / Oversized. The sentence doesn't say whether it counts as a match for S, and the code returns it.
+-  What I changed: I reworded criteria 1 and 4 and left the other three as they were. For 1, I added that the five queries have to be different ones that each match at least one listing, because it couldn't tell which queries to run. For 4, I said a sentence ends at ., ! or ? followed by a space, so a price like $19.99 doesn't get counted as two sentences.
 
-**Moment 2**
+**Moment 2 (debugging Milestone 4)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- What I asked for: I pasted in the message my agent shows when a search comes back empty and asked what I would try next if I knew nothing about the app.
+- What came back: I ran _nothing_found_message on two queries. For wizard robe size XXS under $5:
+▎ Nothing in the listings matched description 'wizard robe', size XXS, under $5. Things to change: try broader words — 'jacket' finds more than 'cropped corduroy jacket'; drop the size, or try a neighbouring one; raise the price ceiling above $5.
+
+  Someone who knew nothing about the app would try dropping the size first, then raising the price, then shortening the description. The message works because it lists only the filters that were actually set. For purple tuxedo it suggests only broader words. One gap is that it never says what kinds of items exist, so "broader words" is a guess. "A neighbouring one" for size also assumes the user knows which sizes are neighbours.
+- What I changed: I didn't change _nothing_found_message in agent.py. It already said what I'd try next, because it only lists the things I actually set (description, size, price) and gives one fix for each. A search with no size never tells you to drop the size, which is what I wanted.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
