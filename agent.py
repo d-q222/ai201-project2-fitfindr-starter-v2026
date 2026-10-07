@@ -44,6 +44,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # what suggest_outfit returned
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
+        "note": None,                # set when the loop changed the search (stretch branch)
     }
 
 
@@ -167,6 +168,24 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             note=f"{len(results)} match(es)",
         )
 
+        # ── SECOND BRANCH (stretch) ───────────────────────────────────────────
+        # Nothing in that size: try the same search with the size dropped, and
+        # say so, rather than ending a run that could still find something.
+        if not results and parsed["size"]:
+            relaxed = {**parsed, "size": None}
+            results = _search(relaxed)
+            if results:
+                session["search_results"] = results
+                session["note"] = (
+                    f"Nothing matched size {parsed['size']}, so the size filter "
+                    f"was dropped. Check the size on the listing before buying."
+                )
+                trace.step(
+                    "branch",
+                    note=f"size {parsed['size']} matched nothing: retried without size, "
+                    f"{len(results)} match(es)",
+                )
+
         # ── THE BRANCH ────────────────────────────────────────────────────────
         if not results:
             session["error"] = _nothing_found_message(parsed)
@@ -252,6 +271,8 @@ def _show(session: dict) -> None:
         return
 
     item = session["selected_item"] or {}
+    if session["note"]:
+        print(f"  note:     {session['note']}")
     print(f"  found:    {item.get('title')} — ${item.get('price')} on {item.get('platform')}")
     print(f"  outfit:   {session['outfit_suggestion']}")
     print(f"  fit card: {session['fit_card']}")
