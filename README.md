@@ -13,8 +13,7 @@
 > python app.py ask 'vintage graphic tee under $30'
 > ```
 >
-> All three tools are stubs, so that last command will do nothing useful yet.
-> That's the starting position.
+> All three tools are built now, so that last command runs the whole agent.
 >
 > **The rest of this file is your submission.** Fill it in as you go.
 
@@ -39,69 +38,46 @@
 
 ## What This Does
 
-This is a tool that helps people online query through and search through outfit websites. It should be able to access Depop and other websites so you can put in a query for t-shirts under $30, for example. It would then help you surface listings that match your query. You can also query for other things, like certain styles, or types of pants, or even brands. Users are also able to have a wardrobe where they keep some of their clothes as well. They can make notes on the clothes about how it pairs in different styles or other pieces that go well with it. It is basically a comprehensive tool to track and buy clothing online. 
-
-<!-- Three or four sentences: what a user asks for, and what they get back. -->
-
-
+This is a tool that helps you search through thrift listings. You type in what you want, like a vintage graphic tee under $30, and it searches the listings and picks the best match. Then it looks at your wardrobe and suggests outfits that use pieces you already own, and writes a short caption you could post about the find. If nothing matches, it stops and tells you what to change, like the words, the size, or the price. If your wardrobe is empty, it gives general styling advice instead.
 
 ---
 
 ## Tool Inventory
 
-<!-- Four lines per tool. This is worth 2 points and it's the single most
-     common place students lose them.
-
-     "Returns a list" earns NOTHING. The description has to say what is IN
-     the list.
-
-     The empty case isn't optional either — it's the thing your loop branches
-     on, and if you don't decide it here you'll discover it as a crash in
-     Milestone 5. -->
-
 ### `search_listings`
 
-- **What it does:** This function searches listing data for items matching a description given in the input, and optionally specific sizes and price ceilings. 
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" --> A string description of the item you want to look for. Optionally, enter a size (string) or a max price (float)
-- **Returns:** A list of matching listing dicts with the best match first. If there is no match, it returns an empty dict. 
-- **When it has nothing:** It should return an empty dict with an empty list. 
+- **What it does:** Searches the listings file for items matching a description, optionally filtered by size and a price ceiling. It does not call a model.
+- **Inputs:** `description` (str) — keywords like "vintage graphic tee"; `size` (str or None) — e.g. "M"; `max_price` (float or None) — inclusive ceiling.
+- **Returns:** A list of listing dicts, best match first, at most 10 (`config.SEARCH_RESULT_LIMIT`). Each dict has `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None) and `platform`. Score is keyword overlap with title words counting double; cheaper listing wins ties. A size matches as a whole token, so "M" matches "S/M" and "M/L" but "S" never matches "US 9" and "L" never matches "XL". "One Size" listings match any size.
+- **When it has nothing:** An empty list `[]`. Not `None`, not an exception.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Asks the model for one or two outfits that combine the new item with pieces from the user's wardrobe.
+- **Inputs:** `new_item` (dict) — a listing dict; `wardrobe` (dict) — has an `items` key holding a list of wardrobe item dicts (`name`, `category`, `colors`, `style_tags`, `notes`).
+- **Returns:** A non-empty string of outfit suggestions that name wardrobe pieces exactly as they are listed.
+- **When it has nothing:** If `wardrobe["items"]` is empty it still returns a string, general styling advice for the item built from common basics. It never returns `""` and never raises.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Asks the model to write a short caption someone would actually post about the find.
+- **Inputs:** `outfit` (str) — the string from `suggest_outfit`; `new_item` (dict) — the listing dict.
+- **Returns:** A two-to-four sentence caption (str) that mentions the item, its price and its platform. It is different on different runs (temperature is 0.9).
+- **When it has nothing:** If `outfit` is empty or only whitespace it returns the message "No fit card written: there was no outfit suggestion to base it on. Run suggest_outfit first." instead of raising.
 
 ---
 
 ## Planning Loop
 
-<!-- Your branch rule, stated as a rule — the condition AND both paths — plus
-     the file and function that holds it.
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` that names the description, size and price that were tried and what to change, and return the session without calling `suggest_outfit` or `create_fit_card` (so `session["fit_card"]` stays `None`). Otherwise take the first result, put it in `session["selected_item"]`, and go on to `suggest_outfit`, then `create_fit_card`.
 
-     Like this:
-       "If search_listings returns an empty list, put a message in the session
-        and stop. Otherwise take the first result and go to suggest_outfit."
-        — agent.py::run_agent
+**Second branch (stretch):** If the search is empty *and* a size was given, the loop retries the same search with the size dropped. If that finds something it sets `session["note"]` saying the size filter was dropped and continues; if it is still empty, the first branch rule applies.
 
-     The grader checks your code against what you claim here, so the file and
-     function have to be real. -->
+**Where it lives:** `agent.py::run_agent` (the message is built by `agent.py::_nothing_found_message`)
 
-**Branch rule:**
+**How the query is parsed:** Regex, in `agent.py::parse_query`. It pulls out a price (`under $30`, `$30`), a size (`size M`, or a bare `, M` at the end) and leaves the rest as the description. I chose regex over asking the model because it costs nothing and gives the same answer twice. What it gives up is phrasing it hasn't seen: "nothing over thirty dollars" parses to no price, so the ceiling is silently ignored.
 
-**Where it lives:** `agent.py::run_agent`
-
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
-
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** `query` → `parsed` (description, size, max_price) → `search_results` → `selected_item` (first result) → `outfit_suggestion` → `fit_card`. Each step reads its input back out of the session rather than getting it passed straight from the last call. `error` is set when the run ends early and `note` when the size was relaxed.
 
 ---
 
